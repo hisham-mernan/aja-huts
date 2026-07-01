@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Aja Huts · أكواخ أجا — Interactive 3D Site</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Aja Huts — an interactive 3D masterplan of a quiet-luxury wooden hut retreat in Jeddah, Saudi Arabia.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Marcellus&display=swap" rel="stylesheet">
+<!-- Three.js r147 (pinned to match the original design) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#e8e0d3;}
+  *{box-sizing:border-box;}
+  @keyframes ajaPulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+  #app{position:fixed; inset:0; font-family:'IBM Plex Sans Arabic',sans-serif; background:#e8e0d3; overflow:hidden;}
+  #container{position:absolute; inset:0;}
+  #overlay{position:absolute; inset:0; pointer-events:none; overflow:hidden;}
+
+  .aja-card{background:rgba(242,237,227,.86); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+            border:1px solid rgba(43,38,32,.12); border-radius:16px;}
+
+  .brand{position:absolute; top:18px; left:20px; display:flex; flex-direction:column; gap:3px;
+         padding:12px 18px; pointer-events:none;}
+  .brand-row{display:flex; align-items:baseline; gap:10px;}
+  .brand-en{font-family:Marcellus,serif; font-size:24px; letter-spacing:.14em; color:#2b2620;}
+  .brand-ar{font-size:16px; font-weight:700; color:#2b2620;}
+  .brand-tag{font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:#a9743f;}
+
+  .controls{position:absolute; top:18px; right:20px; display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+  .ctl-row{display:flex; gap:8px; align-items:center;}
+  .pill-group{display:flex; gap:2px; background:rgba(242,237,227,.86); backdrop-filter:blur(10px);
+              -webkit-backdrop-filter:blur(10px); border:1px solid rgba(43,38,32,.12); border-radius:999px; padding:3px; pointer-events:auto;}
+  .pill{border:none; cursor:pointer; padding:6px 14px; border-radius:999px;
+        font-family:'IBM Plex Sans Arabic',sans-serif; font-size:12px; font-weight:700;
+        background:transparent; color:#5c5346; transition:background .15s,color .15s; white-space:nowrap;}
+  .pill.layout{padding:6px 13px;}
+  .pill.active{background:#2b2620; color:#f2ede3;}
+  .ctl-label{font-size:9.5px; letter-spacing:.18em; text-transform:uppercase; color:#5c5346;
+             background:rgba(242,237,227,.75); padding:4px 9px; border-radius:8px;}
+  .gear{width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center; font-size:15px;}
+
+  .settings{width:250px; padding:14px 16px; pointer-events:auto; display:none; flex-direction:column; gap:14px;
+            box-shadow:0 14px 40px rgba(43,38,32,.18);}
+  .settings.open{display:flex;}
+  .set-title{font-family:Marcellus,serif; font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:#a9743f;}
+  .set-block{display:flex; flex-direction:column; gap:8px;}
+  .set-line{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .set-name{font-size:12px; font-weight:600; color:#2b2620;}
+  .set-name small{display:block; font-weight:400; color:#8a7f6c; font-size:10px;}
+  .set-val{font-size:11.5px; font-weight:700; color:#a9743f; min-width:26px; text-align:right;}
+  .switch{position:relative; width:42px; height:24px; border-radius:999px; background:rgba(43,38,32,.18);
+          border:none; cursor:pointer; padding:0; flex:none; transition:background .15s;}
+  .switch::after{content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+                 background:#f2ede3; transition:transform .15s;}
+  .switch.on{background:#2b2620;}
+  .switch.on::after{transform:translateX(18px);}
+  input[type=range].slider{-webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:999px;
+          background:rgba(43,38,32,.18); outline:none; cursor:pointer;}
+  input[type=range].slider::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+          background:#a9743f; border:2px solid #f2ede3; cursor:pointer;}
+  input[type=range].slider::-moz-range-thumb{width:16px; height:16px; border-radius:50%;
+          background:#a9743f; border:2px solid #f2ede3; cursor:pointer;}
+  .swatches{display:flex; gap:8px;}
+  .swatch{width:26px; height:26px; border-radius:8px; cursor:pointer; border:2px solid rgba(43,38,32,.14); padding:0;}
+  .swatch.active{border-color:#2b2620; box-shadow:0 0 0 2px rgba(169,116,63,.4);}
+
+  #infoPanel{position:absolute; top:118px; right:20px; width:300px; max-height:calc(100% - 200px); overflow:auto;
+             background:rgba(242,237,227,.94); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+             border:1px solid rgba(43,38,32,.14); border-radius:18px; padding:18px 20px; pointer-events:auto;
+             box-shadow:0 18px 50px rgba(43,38,32,.22); display:none;}
+  .ip-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+  .ip-titles{display:flex; flex-direction:column; gap:2px;}
+  .ip-num{font-family:Marcellus,serif; font-size:12px; letter-spacing:.26em; color:#a9743f;}
+  .ip-title-en{font-family:Marcellus,serif; font-size:21px; color:#2b2620;}
+  .ip-title-ar{font-size:15px; font-weight:700; color:#5c5346;}
+  .ip-close{border:none; background:rgba(43,38,32,.08); color:#2b2620; width:26px; height:26px; border-radius:999px;
+            cursor:pointer; font-size:13px; line-height:1; flex:none;}
+  .ip-badge{display:inline-block; margin-top:10px; font-size:10.5px; font-weight:700; letter-spacing:.05em;
+            color:#f2ede3; background:#a9743f; padding:3px 10px; border-radius:999px;}
+  .ip-desc-en{margin-top:12px; font-size:12.5px; line-height:1.55; color:#5c5346;}
+  .ip-desc-ar{margin-top:8px; font-size:12.5px; line-height:1.75; color:#5c5346;}
+  .ip-rows{margin-top:14px;}
+  .ip-row{display:flex; justify-content:space-between; gap:12px; padding:7px 0;
+          border-top:1px solid rgba(43,38,32,.12); font-size:11.5px;}
+  .ip-row .k{color:#8a7f6c; flex:none;}
+  .ip-row .v{color:#2b2620; font-weight:700; text-align:right;}
+
+  .legend{position:absolute; left:20px; bottom:20px; display:flex; flex-direction:column; gap:7px;
+          background:rgba(242,237,227,.86); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+          border:1px solid rgba(43,38,32,.12); border-radius:14px; padding:12px 16px; pointer-events:none;}
+  .legend div{display:flex; align-items:center; gap:8px; font-size:11px; color:#2b2620; font-weight:600;}
+  .legend span{width:10px; height:10px; border-radius:50%; flex:none;}
+
+  .hint{position:absolute; left:50%; bottom:20px; transform:translateX(-50%); font-size:11px; color:#5c5346;
+        background:rgba(242,237,227,.86); border:1px solid rgba(43,38,32,.1); padding:7px 14px; border-radius:999px;
+        pointer-events:none; white-space:nowrap;}
+
+  #loading{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+           gap:12px; background:#e8e0d3; z-index:10;}
+  .load-en{font-family:Marcellus,serif; font-size:36px; letter-spacing:.18em; color:#2b2620;}
+  .load-ar{font-size:19px; font-weight:700; color:#5c5346;}
+  .load-sub{font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:#a9743f; animation:ajaPulse 1.6s ease-in-out infinite;}
+  #errorScreen{position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:#e8e0d3; z-index:11;}
+  #errorScreen .msg{max-width:400px; text-align:center; font-size:14px; line-height:1.6; color:#5c5346; padding:20px;}
+
+  .label-chip{position:absolute; transform:translate(-50%,-115%); background:rgba(43,38,32,.85); color:#f2ede3;
+              font:600 11px 'IBM Plex Sans Arabic',sans-serif; padding:3px 9px; border-radius:999px;
+              border:1px solid rgba(242,237,227,.28); white-space:nowrap; pointer-events:none;}
+
+  @media (max-width:620px){
+    .brand{padding:9px 13px;}
+    .brand-en{font-size:19px;}
+    .controls{left:20px; align-items:stretch;}
+    #infoPanel{width:auto; left:20px; right:20px; top:auto; bottom:90px; max-height:45%;}
+    .settings{width:auto;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="container"></div>
+  <div id="overlay"></div>
+
+  <div class="brand aja-card">
+    <div class="brand-row">
+      <div class="brand-en">AJA HUTS</div>
+      <div class="brand-ar" dir="rtl">أكواخ أجا</div>
+    </div>
+    <div class="brand-tag">Where Luxury Meets Stillness · Jeddah</div>
+  </div>
+
+  <div class="controls">
+    <div class="ctl-row">
+      <div class="pill-group">
+        <button id="btnDay" class="pill active">Day · نهار</button>
+        <button id="btnDusk" class="pill">Dusk · غروب</button>
+      </div>
+      <div class="pill-group">
+        <button id="btnLabels" class="pill active">Labels · تسميات</button>
+      </div>
+      <div class="pill-group">
+        <button id="btnSettings" class="pill gear" title="Settings · إعدادات" aria-label="Settings">⚙</button>
+      </div>
+    </div>
+    <div class="ctl-row">
+      <div class="ctl-label">Layout · المخطط</div>
+      <div class="pill-group">
+        <button id="btnRing" class="pill layout active">Ring · حلقة</button>
+        <button id="btnSketch" class="pill layout">Sketch · المخطط</button>
+        <button id="btnRows" class="pill layout">Rows · صفوف</button>
+      </div>
+    </div>
+
+    <div id="settingsPanel" class="settings aja-card">
+      <div class="set-title">Settings · إعدادات</div>
+      <div class="set-block">
+        <div class="set-line">
+          <div class="set-name">Auto-rotate<small>تدوير تلقائي</small></div>
+          <button id="setAutoRotate" class="switch" role="switch" aria-checked="false" aria-label="Auto-rotate"></button>
+        </div>
+      </div>
+      <div class="set-block">
+        <div class="set-line">
+          <div class="set-name">Tree density<small>كثافة الأشجار</small></div>
+          <div id="setDensityVal" class="set-val">1.0</div>
+        </div>
+        <input id="setDensity" class="slider" type="range" min="0.3" max="2" step="0.1" value="1">
+      </div>
+      <div class="set-block">
+        <div class="set-line">
+          <div class="set-name">Glass tint<small>لون الزجاج</small></div>
+        </div>
+        <div id="setTint" class="swatches"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="infoPanel">
+    <div class="ip-head">
+      <div class="ip-titles">
+        <div id="ipNum" class="ip-num" style="display:none;"></div>
+        <div id="ipTitleEn" class="ip-title-en"></div>
+        <div id="ipTitleAr" class="ip-title-ar" dir="rtl"></div>
+      </div>
+      <button id="ipClose" class="ip-close" aria-label="Close">✕</button>
+    </div>
+    <div id="ipBadge" class="ip-badge"></div>
+    <div id="ipDescEn" class="ip-desc-en"></div>
+    <div id="ipDescAr" class="ip-desc-ar" dir="rtl"></div>
+    <div id="ipRows" class="ip-rows"></div>
+  </div>
+
+  <div class="legend">
+    <div><span style="background:#a9743f;"></span>8 × Private Cabin · وحدة خاصة</div>
+    <div><span style="background:#8a5a34;"></span>4 × Family Cabin · كوخ عائلي</div>
+    <div><span style="background:#a9c9cc;"></span>Café above · Office below — المقهى والمكتب</div>
+  </div>
+
+  <div class="hint">Drag to orbit · Scroll to zoom · Click any cabin — اسحب للتدوير · اضغط على أي كوخ</div>
+
+  <div id="loading">
+    <div class="load-en">AJA HUTS</div>
+    <div class="load-ar" dir="rtl">أكواخ أجا</div>
+    <div class="load-sub">Preparing 3D Site · تجهيز الموقع</div>
+  </div>
+  <div id="errorScreen"><div class="msg"></div></div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  const GLASS_TINTS = ["#cfe0e2","#d8e6d8","#e6dcc8","#cdd8ea"];
+
+  class AjaHuts {
+    constructor(refs){
+      this.refs = refs;                 // { container, overlay, ... UI elements }
+      this.state = { ready:false, error:'', selected:null, labelsOn:true, mode:'day', layout:'ring' };
+      this.settings = { autoRotate:false, treeDensity:1, glassTint:'#cfe0e2' };
+      this.dead = false;
+    }
+
+    /* ---------------------------------------------------------------- boot */
+    boot(){
+      this._boot().catch(e=>this.setError(e.message||String(e)));
+    }
+    async _boot(){
+      await new Promise((res,rej)=>{
+        const t0=Date.now();
+        const id=setInterval(()=>{
+          if(window.THREE&&window.THREE.OrbitControls){clearInterval(id);res();}
+          else if(Date.now()-t0>20000){clearInterval(id);rej(new Error('Could not load the 3D engine. Please check your connection and reload the page.'));}
+        },60);
+      });
+      if(this.dead) return;
+      this.initScene();
+      this.state.ready=true;
+      this.refs.loading.style.display='none';
+    }
+    setError(msg){
+      this.state.error=msg;
+      this.refs.loading.style.display='none';
+      this.refs.errorScreen.querySelector('.msg').textContent=msg;
+      this.refs.errorScreen.style.display='flex';
+    }
+    destroy(){
+      this.dead=true;
+      if(this._raf) cancelAnimationFrame(this._raf);
+      if(this._ro) this._ro.disconnect();
+      if(this.renderer) this.renderer.dispose();
+    }
+
+    /* ------------------------------------------------------------ textures */
+    mkTex(w,h,fn,rx,ry){
+      const T=this.T;
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      fn(c.getContext('2d'),w,h);
+      const t=new T.CanvasTexture(c);
+      t.wrapS=t.wrapT=T.RepeatWrapping;
+      t.repeat.set(rx||1,ry||1);
+      t.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
+      return t;
+    }
+
+    buildTextures(){
+      const wood=(g,w,h)=>{
+        g.fillStyle='#b1804c'; g.fillRect(0,0,w,h);
+        for(let y=0;y<h;y+=18){
+          const v=(Math.random()*22-11)|0;
+          g.fillStyle='rgb('+(170+v)+','+(120+v)+','+(72+v)+')';
+          g.fillRect(0,y,w,17);
+          g.fillStyle='rgba(58,36,16,.6)'; g.fillRect(0,y+16,w,2);
+        }
+        g.strokeStyle='rgba(90,55,25,.22)'; g.lineWidth=1;
+        for(let i=0;i<70;i++){
+          const y=Math.random()*h, x=Math.random()*w;
+          g.beginPath(); g.moveTo(x,y); g.lineTo(x+30+Math.random()*50,y+(Math.random()*4-2)); g.stroke();
+        }
+      };
+      const roof=(g,w,h)=>{
+        g.fillStyle='#453427'; g.fillRect(0,0,w,h);
+        for(let y=0;y<h;y+=16){
+          const v=(Math.random()*14-7)|0;
+          g.fillStyle='rgb('+(72+v)+','+(55+v)+','+(40+v)+')';
+          g.fillRect(0,y,w,15);
+          g.fillStyle='rgba(20,12,6,.7)'; g.fillRect(0,y+14,w,2);
+          for(let x=((y/16)%2)*20;x<w;x+=40){ g.fillStyle='rgba(20,12,6,.4)'; g.fillRect(x,y,1.5,15); }
+        }
+      };
+      const stone=(g,w,h)=>{
+        g.fillStyle='#b3a68c'; g.fillRect(0,0,w,h);
+        for(let i=0;i<46;i++){
+          const x=Math.random()*w, y=Math.random()*h, rx=14+Math.random()*26, ry=10+Math.random()*18;
+          const v=(Math.random()*26-13)|0;
+          g.fillStyle='rgb('+(190+v)+','+(178+v)+','+(152+v)+')';
+          g.beginPath(); g.ellipse(x,y,rx,ry,Math.random()*3,0,Math.PI*2); g.fill();
+        }
+        g.fillStyle='rgba(70,60,45,.12)';
+        for(let i=0;i<400;i++) g.fillRect(Math.random()*w,Math.random()*h,2,2);
+      };
+      const grass=(g,w,h)=>{
+        g.fillStyle='#7f9464'; g.fillRect(0,0,w,h);
+        for(let i=0;i<10;i++){
+          const x=Math.random()*w,y=Math.random()*h,r=30+Math.random()*70;
+          const gr=g.createRadialGradient(x,y,0,x,y,r);
+          gr.addColorStop(0,'rgba(110,130,85,.5)'); gr.addColorStop(1,'rgba(110,130,85,0)');
+          g.fillStyle=gr; g.fillRect(x-r,y-r,r*2,r*2);
+        }
+        for(let i=0;i<3800;i++){
+          const v=(Math.random()*36-18)|0;
+          g.fillStyle='rgba('+(116+v)+','+(138+v)+','+(88+v)+',.7)';
+          g.fillRect(Math.random()*w,Math.random()*h,1.5,3);
+        }
+      };
+      const sand=(g,w,h)=>{
+        g.fillStyle='#dcd0b8'; g.fillRect(0,0,w,h);
+        for(let i=0;i<2600;i++){
+          const v=(Math.random()*24-12)|0;
+          g.fillStyle='rgba('+(214+v)+','+(200+v)+','+(174+v)+',.8)';
+          g.fillRect(Math.random()*w,Math.random()*h,2,2);
+        }
+      };
+      const ao=(g,w,h)=>{
+        const gr=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);
+        gr.addColorStop(0,'rgba(30,22,12,.42)');
+        gr.addColorStop(.65,'rgba(30,22,12,.18)');
+        gr.addColorStop(1,'rgba(30,22,12,0)');
+        g.fillStyle=gr; g.fillRect(0,0,w,h);
+      };
+      const TX=this.TX={};
+      TX.capWood=this.mkTex(256,256,wood,.25,.25);
+      TX.deckWood=this.mkTex(256,256,wood,2,2);
+      TX.podWood=this.mkTex(256,256,wood,10,1.6);
+      TX.roof=this.mkTex(256,256,roof,.22,.22);
+      TX.pathStone=this.mkTex(256,256,stone,.3,.3);
+      TX.baseStone=this.mkTex(256,256,stone,2,.8);
+      TX.grass=this.mkTex(256,256,grass,12,18);
+      TX.sand=this.mkTex(256,256,sand,50,50);
+      TX.ao=this.mkTex(128,128,ao,1,1);
+      TX.ao.wrapS=TX.ao.wrapT=this.T.ClampToEdgeWrapping;
+    }
+
+    /* --------------------------------------------------------------- scene */
+    initScene(){
+      const T=this.T=window.THREE;
+      const el=this.refs.container;
+      const renderer=this.renderer=new T.WebGLRenderer({antialias:true});
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+      renderer.setSize(el.clientWidth||800, el.clientHeight||600);
+      renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
+      renderer.outputEncoding=T.sRGBEncoding;
+      renderer.toneMapping=T.ACESFilmicToneMapping;
+      el.appendChild(renderer.domElement);
+
+      this.buildTextures();
+      const TX=this.TX;
+
+      const scene=this.scene=new T.Scene();
+      scene.fog=new T.Fog(0xd8ddd8,150,470);
+      const camera=this.camera=new T.PerspectiveCamera(44,(el.clientWidth||800)/(el.clientHeight||600),.5,900);
+      camera.position.set(62,44,88);
+      const controls=this.controls=new T.OrbitControls(camera,renderer.domElement);
+      controls.target.set(0,2.5,0); controls.enableDamping=true; controls.dampingFactor=.06;
+      controls.maxPolarAngle=1.44; controls.minDistance=15; controls.maxDistance=240;
+      controls.autoRotate=!!this.settings.autoRotate; controls.autoRotateSpeed=.6;
+
+      const sky=this.sky=new T.Mesh(
+        new T.SphereGeometry(430,24,12),
+        new T.ShaderMaterial({side:T.BackSide, fog:false, depthWrite:false,
+          uniforms:{ctop:{value:new T.Color(0x9dbcd4)},cbot:{value:new T.Color(0xeee9d8)}},
+          vertexShader:'varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+          fragmentShader:'varying vec3 vP;uniform vec3 ctop;uniform vec3 cbot;void main(){float h=clamp(normalize(vP).y*0.5+0.5,0.0,1.0);gl_FragColor=vec4(mix(cbot,ctop,pow(h,0.75)),1.0);}'
+        }));
+      scene.add(sky);
+
+      const M=this.M={
+        capWood:new T.MeshStandardMaterial({map:TX.capWood,roughness:.8}),
+        deck:new T.MeshStandardMaterial({map:TX.deckWood,color:0xe3c49b,roughness:.85}),
+        podium:new T.MeshStandardMaterial({map:TX.podWood,roughness:.8}),
+        roof:new T.MeshStandardMaterial({map:TX.roof,roughness:.9}),
+        woodSolid:new T.MeshStandardMaterial({color:0xa9743f,roughness:.72}),
+        woodDark:new T.MeshStandardMaterial({color:0x5f3f22,roughness:.75}),
+        pathStone:new T.MeshStandardMaterial({map:TX.pathStone,roughness:.95}),
+        baseStone:new T.MeshStandardMaterial({map:TX.baseStone,color:0xd8cfbb,roughness:.95}),
+        plot:new T.MeshStandardMaterial({map:TX.grass,roughness:1}),
+        sand:new T.MeshStandardMaterial({map:TX.sand,roughness:1}),
+        glass:new T.MeshPhysicalMaterial({color:0xcfe0e2,roughness:.12,metalness:0,transparent:true,opacity:.34,side:T.DoubleSide}),
+        glow:new T.MeshStandardMaterial({color:0xf6e7c8,emissive:0xffb45e,emissiveIntensity:0}),
+        ao:new T.MeshBasicMaterial({map:TX.ao,transparent:true,depthWrite:false}),
+        leaf:[new T.MeshStandardMaterial({color:0x71855f,roughness:.95}),new T.MeshStandardMaterial({color:0x5f7a52,roughness:.95}),new T.MeshStandardMaterial({color:0x83966c,roughness:.95})],
+        trunk:new T.MeshStandardMaterial({color:0x7d5f3f,roughness:.95}),
+        water:new T.MeshStandardMaterial({color:0x9ec4bf,roughness:.1,metalness:.05})
+      };
+      M.glass.color.set(this.settings.glassTint);
+      this._glassTint=this.settings.glassTint;
+      this._density=this.settings.treeDensity;
+
+      const hemi=this.hemi=new T.HemisphereLight(0xf4f6ef,0xcfc2a8,.55); scene.add(hemi);
+      const sun=this.sun=new T.DirectionalLight(0xfff3dc,1.2);
+      sun.position.set(45,70,25); sun.castShadow=true;
+      sun.shadow.mapSize.set(2048,2048);
+      sun.shadow.camera.left=-85; sun.shadow.camera.right=85;
+      sun.shadow.camera.top=95; sun.shadow.camera.bottom=-95;
+      sun.shadow.camera.near=1; sun.shadow.camera.far=320;
+      sun.shadow.bias=-0.0004;
+      sun.shadow.camera.updateProjectionMatrix();
+      scene.add(sun); scene.add(sun.target);
+      const cafeLight=this.cafeLight=new T.PointLight(0xffb45e,0,55,2);
+      cafeLight.position.set(0,5.2,0); scene.add(cafeLight);
+
+      const lay=this.labelLayer=document.createElement('div');
+      lay.style.cssText='position:absolute;inset:0;pointer-events:none;';
+      this.refs.overlay.appendChild(lay);
+      this.labels=[];
+
+      this.site=new T.Group(); this.site.position.y=.3; scene.add(this.site);
+      this.hutGroup=new T.Group(); this.pathGroup=new T.Group(); this.vegGroup=new T.Group();
+      this.site.add(this.hutGroup); this.site.add(this.pathGroup); this.site.add(this.vegGroup);
+      this.pickables=[]; this.staticPicks=[]; this.hutMats={};
+
+      this.buildStatic();
+      this.buildSite(this.state.layout);
+      this.applyMode(this.state.mode);
+
+      const dom=renderer.domElement;
+      let px=0,py=0;
+      dom.addEventListener('pointerdown',e=>{px=e.clientX;py=e.clientY;});
+      dom.addEventListener('pointerup',e=>{ if(Math.hypot(e.clientX-px,e.clientY-py)>6)return; this.pick(e); });
+      this._ro=new ResizeObserver(()=>{
+        const w=el.clientWidth,h=el.clientHeight; if(!w||!h)return;
+        camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
+      });
+      this._ro.observe(el);
+
+      const v=new T.Vector3();
+      const loop=()=>{
+        if(this.dead) return;
+        this._raf=requestAnimationFrame(loop);
+        controls.update();
+        const w=dom.clientWidth,h=dom.clientHeight;
+        for(const l of this.labels){
+          v.copy(l.pos).project(camera);
+          if(v.z>1){ l.el.style.display='none'; continue; }
+          l.el.style.display='';
+          l.el.style.left=((v.x*.5+.5)*w)+'px';
+          l.el.style.top=((-v.y*.5+.5)*h)+'px';
+        }
+        renderer.render(scene,camera);
+      };
+      loop();
+    }
+
+    rectGeo(w,h){
+      const T=this.T,s=new T.Shape();
+      s.moveTo(-w/2,-h/2); s.lineTo(w/2,-h/2); s.lineTo(w/2,h/2); s.lineTo(-w/2,h/2); s.closePath();
+      const g=new T.ShapeGeometry(s); g.rotateX(-Math.PI/2);
+      return g;
+    }
+
+    buildStatic(){
+      const T=this.T,M=this.M,S=this.site;
+      const ground=new T.Mesh(new T.PlaneGeometry(600,600),M.sand);
+      ground.rotation.x=-Math.PI/2; ground.position.y=-.305; ground.receiveShadow=true; S.add(ground);
+      const plot=new T.Mesh(new T.BoxGeometry(70,.3,110),M.plot);
+      plot.position.y=-.15; plot.receiveShadow=true; S.add(plot);
+
+      const mkWall=(w,d,x,z)=>{
+        const m=new T.Mesh(new T.BoxGeometry(w,.9,d),M.woodDark);
+        m.position.set(x,.45,z); m.castShadow=true; m.receiveShadow=true; S.add(m);
+      };
+      mkWall(.6,110,-35,0); mkWall(.6,110,35,0);
+      mkWall(30.2,.6,-19.6,54.7); mkWall(30.2,.6,19.6,54.7);
+      mkWall(30.2,.6,-19.6,-54.7); mkWall(30.2,.6,19.6,-54.7);
+      this.mkGate(0,54.7,true); this.mkGate(0,-54.7,false);
+      this.buildCafe();
+
+      const pond=new T.Mesh(new T.CircleGeometry(3.4,36),M.water);
+      pond.rotation.x=-Math.PI/2; pond.scale.set(1,1.35,1);
+      pond.position.set(11.5,.06,-13); pond.receiveShadow=true; S.add(pond);
+      const rim=new T.Mesh(new T.TorusGeometry(3.5,.13,8,44),M.baseStone);
+      rim.rotation.x=Math.PI/2; rim.scale.set(1,1.35,1);
+      rim.position.set(11.5,.1,-13); rim.castShadow=true; S.add(rim);
+
+      for(const z of [-44,-30,-16,16,30,44]) for(const x of [-3.4,3.4]){
+        const post=new T.Mesh(new T.CylinderGeometry(.07,.1,1.5,6),M.woodDark);
+        post.position.set(x,.75,z); post.castShadow=true; S.add(post);
+        const bulb=new T.Mesh(new T.SphereGeometry(.2,10,8),M.glow);
+        bulb.position.set(x,1.62,z); S.add(bulb);
+      }
+    }
+
+    mkGate(x,z,main){
+      const T=this.T,M=this.M,g=new T.Group();
+      const s=main?1:.8;
+      const p1=new T.Mesh(new T.BoxGeometry(.9*s,3.4*s,.9*s),M.woodSolid); p1.position.set(-3*s,1.7*s,0); p1.castShadow=true;
+      const p2=p1.clone(); p2.position.x=3*s;
+      const beam=new T.Mesh(new T.BoxGeometry(7.6*s,.55*s,1.1*s),M.woodDark); beam.position.y=3.4*s; beam.castShadow=true;
+      g.add(p1); g.add(p2); g.add(beam);
+      g.position.set(x,0,z); this.site.add(g);
+      const info= main?
+        {titleEn:'Main Entrance',titleAr:'المدخل الرئيسي',badge:'South Gate · البوابة الجنوبية',
+         descEn:'The primary guest arrival point, opening onto the central garden walkway that leads to the café and the cabins.',
+         descAr:'نقطة وصول الضيوف الرئيسية، تفتح على الممشى المركزي المؤدي إلى المقهى والأكواخ.',
+         rows:[{k:'Access · الوصول',v:'Guests · الضيوف'},{k:'Leads to · يؤدي إلى',v:'Central walkway · الممشى'}]}:
+        {titleEn:'Back Entrance',titleAr:'المدخل الخلفي',badge:'North Gate · البوابة الشمالية',
+         descEn:'A secondary entrance at the rear of the site, for services and staff.',
+         descAr:'مدخل ثانوي في الجهة الخلفية للموقع مخصص للخدمات والموظفين.',
+         rows:[{k:'Access · الوصول',v:'Service · الخدمات'}]};
+      [p1,p2,beam].forEach(m=>{ m.userData.info=info; this.staticPicks.push(m); });
+    }
+
+    buildCafe(){
+      const T=this.T,M=this.M,S=this.site;
+      const info={titleEn:'Coffee & Lounge',titleAr:'منطقة القهوة والاستراحة',
+        badge:'Café above · Office below',
+        descEn:'An elevated café under a full glass roof, overlooking all twelve cabins. The main business office occupies the enclosed level below.',
+        descAr:'مقهى مرتفع بسقف زجاجي كامل يطل على جميع الأكواخ الاثني عشر، ويقع المكتب الرئيسي في الطابق المغلق أسفله.',
+        rows:[
+          {k:'Upper level · الطابق العلوي',v:'Café · المقهى'},
+          {k:'Lower level · الطابق السفلي',v:'Main Office · المكتب الرئيسي'},
+          {k:'Roof · السقف',v:'Glass dome · قبة زجاجية'},
+          {k:'View · الإطلالة',v:'360° over the cabins'}
+        ]};
+      const aoc=new T.Mesh(new T.PlaneGeometry(24,24),M.ao);
+      aoc.rotation.x=-Math.PI/2; aoc.position.y=.012; S.add(aoc);
+      const podium=new T.Mesh(new T.CylinderGeometry(6.4,6.8,3,36),M.podium);
+      podium.position.y=1.5; podium.castShadow=true; podium.receiveShadow=true; S.add(podium);
+      for(let i=1;i<10;i++){
+        const a=i/10*Math.PI*2;
+        const w=new T.Mesh(new T.PlaneGeometry(2,1.25),M.glow);
+        w.position.set(Math.sin(a)*6.65,1.8,Math.cos(a)*6.65); w.rotation.y=a; S.add(w);
+      }
+      const door=new T.Mesh(new T.BoxGeometry(1.5,2.3,.16),M.woodDark);
+      door.position.set(0,1.15,6.65); door.castShadow=true; S.add(door);
+      const floor=new T.Mesh(new T.CylinderGeometry(8.2,8.5,.4,40),M.deck);
+      floor.position.y=3.2; floor.castShadow=true; floor.receiveShadow=true; S.add(floor);
+      for(let i=0;i<12;i++){
+        const a=i/12*Math.PI*2;
+        const post=new T.Mesh(new T.CylinderGeometry(.06,.06,.85,6),M.woodDark);
+        post.position.set(Math.sin(a)*8,3.82,Math.cos(a)*8); S.add(post);
+      }
+      const rail=new T.Mesh(new T.TorusGeometry(8,.06,8,48),M.woodDark);
+      rail.rotation.x=Math.PI/2; rail.position.y=4.25; S.add(rail);
+      for(let i=0;i<4;i++){
+        const a=i/4*Math.PI*2+.6;
+        const top=new T.Mesh(new T.CylinderGeometry(.55,.55,.08,16),M.woodDark);
+        top.position.set(Math.sin(a)*5,3.96,Math.cos(a)*5); S.add(top);
+        const leg=new T.Mesh(new T.CylinderGeometry(.06,.06,.55,6),M.woodDark);
+        leg.position.set(Math.sin(a)*5,3.68,Math.cos(a)*5); S.add(leg);
+      }
+      const domeGeo=new T.SphereGeometry(7.9,36,18,0,Math.PI*2,0,Math.PI/2);
+      domeGeo.scale(1,.62,1);
+      const dome=new T.Mesh(domeGeo,M.glass); dome.position.y=3.42; S.add(dome);
+      const domeRim=new T.Mesh(new T.TorusGeometry(7.9,.11,8,48),M.woodSolid);
+      domeRim.rotation.x=Math.PI/2; domeRim.position.y=3.46; domeRim.castShadow=true; S.add(domeRim);
+      const finial=new T.Mesh(new T.SphereGeometry(.24,10,8),M.woodDark);
+      finial.position.y=8.5; S.add(finial);
+      for(let i=0;i<7;i++){
+        const step=new T.Mesh(new T.BoxGeometry(2.8,.46,.95),M.deck);
+        step.position.set(0,.23+i*.46,8.5+(6-i)*.8);
+        step.castShadow=true; step.receiveShadow=true; S.add(step);
+      }
+      [podium,dome,floor,door].forEach(m=>{ m.userData.info=info; this.staticPicks.push(m); });
+    }
+
+    hutDefs(layout){
+      const famIdx={ring:[1,4,7,10],sketch:[1,5,8,11],rows:[0,5,6,11]}[layout];
+      let pts;
+      if(layout==='ring'){
+        pts=[]; for(let i=0;i<12;i++){ const a=(i+.5)/12*Math.PI*2; pts.push([Math.sin(a)*23,Math.cos(a)*35]); }
+      } else if(layout==='sketch'){
+        pts=[[-14,-38],[-2,-42],[10,-40],[20,-31],[-23,-29],[25,-12],[26,6],[20,24],[-26,-8],[-25,12],[-14,31],[14,36]];
+      } else {
+        pts=[]; for(let i=0;i<6;i++) pts.push([-17,-40+i*16]); for(let i=0;i<6;i++) pts.push([17,-40+i*16]);
+      }
+      return pts.map((p,i)=>({x:p[0],z:p[1],family:famIdx.includes(i)}));
+    }
+
+    buildSite(layout){
+      const T=this.T;
+      this.disposeGroup(this.hutGroup); this.disposeGroup(this.pathGroup);
+      this.pickables=this.staticPicks.slice();
+      this.hutMats={}; this._bulbPts=[];
+      const defs=this.hutDefs(layout);
+      this.hutPositions=defs.map(d=>({x:d.x,z:d.z,r:(d.family?1.28:1)*5.2}));
+      defs.forEach((d,i)=>this.mkHut(d,i));
+      if(this._bulbPts.length){
+        const im=new T.InstancedMesh(new T.SphereGeometry(.075,8,6),this.M.glow,this._bulbPts.length);
+        const m4=new T.Matrix4();
+        this._bulbPts.forEach((p,idx)=>{ m4.makeTranslation(p.x,p.y,p.z); im.setMatrixAt(idx,m4); });
+        im.instanceMatrix.needsUpdate=true;
+        this.hutGroup.add(im);
+      }
+      this.buildPaths(layout,defs);
+      this.buildVegetation();
+      this.buildLabels(defs);
+      this.select(null);
+    }
+
+    disposeGroup(g){
+      g.traverse(o=>{
+        if(o.isInstancedMesh) o.dispose();
+        if(o.geometry) o.geometry.dispose();
+        if(o.userData._ownMat!==undefined && o.material){
+          const m=Array.isArray(o.material)?o.material[o.userData._ownMat]:o.material;
+          if(m&&m.dispose) m.dispose();
+        }
+      });
+      g.clear();
+    }
+
+    mkHut(d,i){
+      const T=this.T,M=this.M;
+      const s=d.family?1.28:1;
+      const g=new T.Group();
+      const num=String(i+1).padStart(2,'0');
+      const rotY=Math.atan2(-d.x,-d.z);
+      const W=3.0,H=5.0,D=6.5,yB=.5;
+
+      const ao=new T.Mesh(new T.PlaneGeometry(W*2+5,D+6.5),M.ao);
+      ao.rotation.x=-Math.PI/2; ao.position.y=.014; g.add(ao);
+
+      const base=new T.Mesh(new T.BoxGeometry(W*2+1.1,.5,D+1.1),M.baseStone);
+      base.position.y=.25; base.castShadow=true; base.receiveShadow=true; g.add(base);
+
+      const capMat=M.capWood.clone();
+      capMat.emissive=new T.Color(0xd07a35); capMat.emissiveIntensity=0;
+      if(d.family) capMat.color=new T.Color(0xcfa06a);
+
+      const shape=new T.Shape();
+      shape.moveTo(-W,0);
+      shape.quadraticCurveTo(-W*.82,H*.58,0,H);
+      shape.quadraticCurveTo(W*.82,H*.58,W,0);
+      shape.closePath();
+      const bodyGeo=new T.ExtrudeGeometry(shape,{depth:D,bevelEnabled:false,curveSegments:14});
+      bodyGeo.translate(0,0,-D/2);
+      const body=new T.Mesh(bodyGeo,[capMat,M.roof]);
+      body.position.y=yB; body.castShadow=true; body.receiveShadow=true;
+      body.userData._ownMat=0;
+      g.add(body);
+
+      for(const sideZ of [D/2+.03,-D/2-.03]) for(const dir of [-1,1]){
+        const curve=new T.QuadraticBezierCurve3(
+          new T.Vector3(dir*W,0,sideZ),
+          new T.Vector3(dir*W*.82,H*.58,sideZ),
+          new T.Vector3(0,H,sideZ));
+        const tube=new T.Mesh(new T.TubeGeometry(curve,10,.07,6),M.woodDark);
+        tube.position.y=yB; tube.castShadow=true; g.add(tube);
+      }
+
+      const up=new T.Vector3(0,1,0);
+      for(const dir of [-1,1]){
+        const c=new T.QuadraticBezierCurve3(
+          new T.Vector3(dir*W,yB+.3,D/2+.12),
+          new T.Vector3(dir*W*.82,yB+H*.58,D/2+.12),
+          new T.Vector3(0,yB+H,D/2+.12));
+        const kMax=dir<0?7:6;
+        for(let k=0;k<=kMax;k++){
+          const v=c.getPoint(k/7);
+          v.multiplyScalar(s); v.applyAxisAngle(up,rotY);
+          v.x+=d.x; v.z+=d.z;
+          this._bulbPts.push(v);
+        }
+      }
+
+      const gl=new T.Shape();
+      gl.moveTo(-W*.58,.85); gl.lineTo(W*.58,.85); gl.lineTo(0,H*.84); gl.closePath();
+      const glz=new T.Mesh(new T.ShapeGeometry(gl),M.glass);
+      glz.position.set(0,yB,D/2+.04); g.add(glz);
+      const mulV=new T.Mesh(new T.BoxGeometry(.09,H*.84-.85,.07),M.woodDark);
+      mulV.position.set(0,yB+(.85+H*.84)/2,D/2+.06); g.add(mulV);
+      const mulH=new T.Mesh(new T.BoxGeometry(W*.95,.09,.07),M.woodDark);
+      mulH.position.set(0,yB+2.35,D/2+.06); g.add(mulH);
+
+      const door=new T.Mesh(new T.BoxGeometry(1.0,2.0,.14),M.woodDark);
+      door.position.set(-.65,yB+1.0,D/2+.1); door.castShadow=true; g.add(door);
+      const doorPane=new T.Mesh(new T.PlaneGeometry(.4,1.0),M.glow);
+      doorPane.position.set(-.65,yB+1.15,D/2+.19); g.add(doorPane);
+      const winL=new T.Mesh(new T.PlaneGeometry(1.0,1.0),M.glow);
+      winL.position.set(.85,yB+1.5,D/2+.12); g.add(winL);
+
+      const backWin=new T.Mesh(new T.PlaneGeometry(1.4,1.0),M.glow);
+      backWin.position.set(0,yB+1.7,-D/2-.05); backWin.rotation.y=Math.PI; g.add(backWin);
+
+      const deck=new T.Mesh(new T.BoxGeometry(W*2+1.1,.22,1.9),M.deck);
+      deck.position.set(0,.39,D/2+1.5); deck.castShadow=true; deck.receiveShadow=true; g.add(deck);
+      const step=new T.Mesh(new T.BoxGeometry(1.7,.2,.55),M.deck);
+      step.position.set(-.65,.1,D/2+2.7); step.receiveShadow=true; g.add(step);
+      for(const dx of [-(W+.35),W+.35]){
+        const rp=new T.Mesh(new T.BoxGeometry(.09,.85,.09),M.woodDark);
+        rp.position.set(dx,.9,D/2+2.35); g.add(rp);
+      }
+      const drail=new T.Mesh(new T.BoxGeometry(W*2+.8,.07,.07),M.woodDark);
+      drail.position.set(0,1.3,D/2+2.35);
+      g.add(drail);
+
+      if(d.family){
+        const balc=new T.Mesh(new T.BoxGeometry(3.1,.15,1.1),M.deck);
+        balc.position.set(0,yB+2.55,D/2+.5); balc.castShadow=true; g.add(balc);
+        const brail=new T.Mesh(new T.BoxGeometry(3.1,.07,.07),M.woodDark);
+        brail.position.set(0,yB+3.3,D/2+1.0); g.add(brail);
+        for(const dx of [-1.5,0,1.5]){
+          const bp=new T.Mesh(new T.BoxGeometry(.08,.75,.08),M.woodDark);
+          bp.position.set(dx,yB+2.95,D/2+1.0); g.add(bp);
+        }
+        const bwin=new T.Mesh(new T.PlaneGeometry(1.1,.85),M.glow);
+        bwin.position.set(0,yB+3.15,D/2+.07); g.add(bwin);
+      }
+
+      g.scale.setScalar(s);
+      g.position.set(d.x,0,d.z);
+      g.rotation.y=rotY;
+      this.hutGroup.add(g);
+
+      const type=d.family?
+        {en:'Family Cabin',ar:'كوخ عائلي',size:'~85 m²',
+         badge:'Sleeps 4–6 · تتسع ٤–٦ ضيوف',
+         descEn:'A spacious curved A-frame cabin in warm wood, with a glazed gable, upper balcony, and private deck for family stays.',
+         descAr:'كوخ خشبي واسع بجملون مقوّس وواجهة زجاجية وشرفة علوية ومجلس خارجي خاص، مصمم لإقامة عائلية مريحة.'}:
+        {en:'Private Cabin',ar:'وحدة إقامة خاصة',size:'~48 m²',
+         badge:'Sleeps 2 · تتسع لضيفين',
+         descEn:'An independent curved A-frame wooden cabin with a glazed gable and private deck, offering calm and privacy for one or two guests.',
+         descAr:'كوخ خشبي مستقل بجملون مقوّس وواجهة زجاجية ومجلس خارجي خاص، يوفر الهدوء والخصوصية لضيف أو اثنين.'};
+      const info={num,titleEn:type.en,titleAr:type.ar,badge:type.badge,descEn:type.descEn,descAr:type.descAr,_matKey:num,
+        rows:[
+          {k:'Size · المساحة',v:type.size},
+          {k:'Form · الشكل',v:'Curved A-frame · جملون مقوّس'},
+          {k:'Front · الواجهة',v:'Glazed gable · زجاجية'},
+          {k:'Structure · الهيكل',v:'Wood · خشب'}
+        ]};
+      this.hutMats[num]=capMat;
+      [body,glz,deck,door,base].forEach(m=>{ m.userData.info=info; this.pickables.push(m); });
+    }
+
+    buildPaths(layout,defs){
+      const T=this.T,M=this.M,P=this.pathGroup;
+      const spine=new T.Mesh(this.rectGeo(4.6,108),M.pathStone);
+      spine.position.y=.05; spine.receiveShadow=true; P.add(spine);
+      if(layout==='ring'){
+        const shape=new T.Shape(); shape.absellipse(0,0,25.4,37.4,0,Math.PI*2,false,0);
+        const hole=new T.Path(); hole.absellipse(0,0,20.6,32.6,0,Math.PI*2,true,0);
+        shape.holes.push(hole);
+        const geo=new T.ShapeGeometry(shape,64); geo.rotateX(-Math.PI/2);
+        const ring=new T.Mesh(geo,M.pathStone);
+        ring.position.y=.03; ring.receiveShadow=true; P.add(ring);
+      } else {
+        for(const d of defs){
+          const len=Math.abs(d.x);
+          const c=new T.Mesh(this.rectGeo(len,2.4),M.pathStone);
+          c.position.set(d.x/2,.02,d.z); c.receiveShadow=true; P.add(c);
+        }
+      }
+    }
+
+    buildVegetation(){
+      this.disposeGroup(this.vegGroup);
+      if(!this.hutPositions) return;
+      const rng=this.mulberry(42);
+      const n=Math.round(64*(this._density??1));
+      let placed=0,guard=0;
+      while(placed<n && guard<n*40){
+        guard++;
+        const x=(rng()*2-1)*32.5, z=(rng()*2-1)*52;
+        if(Math.abs(x)<4.2) continue;
+        if(Math.hypot(x,z)<12.5) continue;
+        if(Math.hypot(x-11.5,(z+13)/1.35)<5.4) continue;
+        if(Math.abs(z)>47 && Math.abs(x)<8) continue;
+        let bad=false;
+        for(const h of this.hutPositions){ if(Math.hypot(x-h.x,z-h.z)<h.r+2.1){bad=true;break;} }
+        if(bad) continue;
+        const t=rng();
+        const obj= t<.38? this.mkPalm(rng) : t<.78? this.mkTree(rng) : this.mkShrub(rng);
+        obj.position.set(x,0,z);
+        obj.rotation.y=rng()*Math.PI*2;
+        this.vegGroup.add(obj);
+        placed++;
+      }
+    }
+
+    mulberry(a){
+      return function(){
+        a|=0; a=a+0x6D2B79F5|0;
+        let t=Math.imul(a^a>>>15,1|a);
+        t=t+Math.imul(t^t>>>7,61|t)^t;
+        return ((t^t>>>14)>>>0)/4294967296;
+      };
+    }
+
+    mkTree(rng){
+      const T=this.T,M=this.M,g=new T.Group(),s=.8+rng()*.7;
+      const tr=new T.Mesh(new T.CylinderGeometry(.11,.17,1.3,6),M.trunk);
+      tr.position.y=.65; tr.castShadow=true; g.add(tr);
+      for(let i=0;i<3;i++){
+        const r=.7+rng()*.6;
+        const f=new T.Mesh(new T.SphereGeometry(r,10,8),M.leaf[Math.floor(rng()*3)]);
+        f.position.set((rng()-.5)*1,1.3+rng()*.9,(rng()-.5)*1);
+        f.castShadow=true; g.add(f);
+      }
+      g.scale.setScalar(s); return g;
+    }
+
+    mkPalm(rng){
+      const T=this.T,M=this.M,g=new T.Group(),s=.85+rng()*.6;
+      const tr=new T.Mesh(new T.CylinderGeometry(.12,.2,3.4,7),M.trunk);
+      tr.position.y=1.7; tr.rotation.z=(rng()-.5)*.14; tr.castShadow=true; g.add(tr);
+      const top=new T.Group(); top.position.y=3.35;
+      for(let i=0;i<7;i++){
+        const geo=new T.ConeGeometry(.42,2.6,4); geo.translate(0,1.3,0);
+        const f=new T.Mesh(geo,M.leaf[i%3]);
+        f.rotation.y=i/7*Math.PI*2; f.rotateX(1.9);
+        f.scale.set(.8,1,.25); f.castShadow=true; top.add(f);
+      }
+      g.add(top);
+      g.scale.setScalar(s); return g;
+    }
+
+    mkShrub(rng){
+      const T=this.T,M=this.M,g=new T.Group();
+      const b=new T.Mesh(new T.SphereGeometry(.5+rng()*.35,9,7),M.leaf[Math.floor(rng()*3)]);
+      b.scale.y=.72; b.position.y=.32; b.castShadow=true; g.add(b);
+      return g;
+    }
+
+    buildLabels(defs){
+      this.labelLayer.innerHTML=''; this.labels=[];
+      const add=(x,y,z,html)=>{
+        const d=document.createElement('div');
+        d.className='label-chip'; d.innerHTML=html;
+        this.labelLayer.appendChild(d);
+        this.labels.push({pos:new this.T.Vector3(x,y+.3,z),el:d});
+      };
+      defs.forEach((d,i)=>{
+        const num=String(i+1).padStart(2,'0'); const s=d.family?1.28:1;
+        add(d.x,6.3*s,d.z, d.family? num+' · عائلي' : num);
+      });
+      add(0,9.8,0,'CAFÉ · المقهى');
+      add(0,4.8,54.7,'Main Entrance · المدخل الرئيسي');
+      add(0,4.2,-54.7,'Back Entrance · المدخل الخلفي');
+      this.setLabelsVisible(this.state.labelsOn);
+    }
+
+    setLabelsVisible(v){ if(this.labelLayer) this.labelLayer.style.display=v?'':'none'; }
+
+    /* --------------------------------------------------------- selection UI */
+    select(info){
+      for(const k in this.hutMats) this.hutMats[k].emissiveIntensity=0;
+      if(info && info._matKey && this.hutMats[info._matKey]) this.hutMats[info._matKey].emissiveIntensity=.4;
+      this.state.selected=info||null;
+      this.renderSelection();
+    }
+
+    renderSelection(){
+      const sel=this.state.selected, R=this.refs;
+      if(!sel){ R.infoPanel.style.display='none'; return; }
+      R.infoPanel.style.display='block';
+      R.infoPanel.scrollTop=0;
+      if(sel.num){ R.ipNum.style.display=''; R.ipNum.textContent='HUT '+sel.num; }
+      else { R.ipNum.style.display='none'; }
+      R.ipTitleEn.textContent=sel.titleEn||'';
+      R.ipTitleAr.textContent=sel.titleAr||'';
+      R.ipBadge.textContent=sel.badge||'';
+      R.ipDescEn.textContent=sel.descEn||'';
+      R.ipDescAr.textContent=sel.descAr||'';
+      R.ipRows.innerHTML='';
+      (sel.rows||[]).forEach(row=>{
+        const el=document.createElement('div'); el.className='ip-row';
+        const k=document.createElement('div'); k.className='k'; k.textContent=row.k;
+        const v=document.createElement('div'); v.className='v'; v.textContent=row.v;
+        el.appendChild(k); el.appendChild(v); R.ipRows.appendChild(el);
+      });
+    }
+
+    pick(e){
+      const T=this.T;
+      const r=this.renderer.domElement.getBoundingClientRect();
+      if(!this._ray) this._ray=new T.Raycaster();
+      const m=new T.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+      this._ray.setFromCamera(m,this.camera);
+      const hits=this._ray.intersectObjects(this.pickables,false);
+      this.select(hits.length?hits[0].object.userData.info:null);
+    }
+
+    /* ------------------------------------------------------------- controls */
+    setMode(m){ this.state.mode=m; this.applyMode(m); }
+    setLayout(l){ this.state.layout=l; this.buildSite(l); }
+    toggleLabels(){ const v=!this.state.labelsOn; this.state.labelsOn=v; this.setLabelsVisible(v); return v; }
+
+    setAutoRotate(v){ this.settings.autoRotate=v; if(this.controls) this.controls.autoRotate=v; }
+    setTreeDensity(v){ this.settings.treeDensity=v; if(this.M){ this._density=v; this.buildVegetation(); } }
+    setGlassTint(v){ this.settings.glassTint=v; this._glassTint=v; if(this.M) this.M.glass.color.set(v); }
+
+    applyMode(m){
+      const dusk=(m==='dusk');
+      this.sky.material.uniforms.ctop.value.setHex(dusk?0x352f47:0x9dbcd4);
+      this.sky.material.uniforms.cbot.value.setHex(dusk?0xff9a5f:0xeee9d8);
+      this.scene.fog.color.setHex(dusk?0x51404d:0xd8ddd8);
+      this.sun.color.setHex(dusk?0xff9660:0xfff3dc);
+      this.sun.intensity=dusk?.75:1.2;
+      this.sun.position.set(dusk?-60:45, dusk?20:70, dusk?40:25);
+      this.hemi.intensity=dusk?.32:.55;
+      this.hemi.color.setHex(dusk?0x7d7290:0xf4f6ef);
+      this.hemi.groundColor.setHex(dusk?0x3a332c:0xcfc2a8);
+      this.renderer.toneMappingExposure=dusk?.95:1.05;
+      this.M.glow.emissiveIntensity=dusk?1.5:0;
+      this.cafeLight.intensity=dusk?1.1:0;
+      this.M.glass.opacity=dusk?.42:.34;
+    }
+  }
+
+  /* ============================================================= UI wiring */
+  function $(id){ return document.getElementById(id); }
+
+  const refs={
+    container:$('container'), overlay:$('overlay'),
+    loading:$('loading'), errorScreen:$('errorScreen'),
+    infoPanel:$('infoPanel'), ipNum:$('ipNum'), ipTitleEn:$('ipTitleEn'), ipTitleAr:$('ipTitleAr'),
+    ipBadge:$('ipBadge'), ipDescEn:$('ipDescEn'), ipDescAr:$('ipDescAr'), ipRows:$('ipRows')
+  };
+
+  const app=new AjaHuts(refs);
+
+  const groups={
+    mode:{ day:$('btnDay'), dusk:$('btnDusk') },
+    layout:{ ring:$('btnRing'), sketch:$('btnSketch'), rows:$('btnRows') }
+  };
+  function setActive(map,key){ for(const k in map) map[k].classList.toggle('active', k===key); }
+
+  groups.mode.day.onclick =()=>{ app.setMode('day');  setActive(groups.mode,'day'); };
+  groups.mode.dusk.onclick=()=>{ app.setMode('dusk'); setActive(groups.mode,'dusk'); };
+  groups.layout.ring.onclick  =()=>{ app.setLayout('ring');   setActive(groups.layout,'ring'); };
+  groups.layout.sketch.onclick=()=>{ app.setLayout('sketch'); setActive(groups.layout,'sketch'); };
+  groups.layout.rows.onclick  =()=>{ app.setLayout('rows');   setActive(groups.layout,'rows'); };
+
+  $('btnLabels').onclick=()=>{ const v=app.toggleLabels(); $('btnLabels').classList.toggle('active',v); };
+  $('ipClose').onclick=()=>app.select(null);
+
+  // Settings popover
+  const settingsPanel=$('settingsPanel');
+  $('btnSettings').onclick=()=>{
+    const open=settingsPanel.classList.toggle('open');
+    $('btnSettings').classList.toggle('active',open);
+  };
+
+  const swAuto=$('setAutoRotate');
+  swAuto.onclick=()=>{
+    const v=!swAuto.classList.contains('on');
+    swAuto.classList.toggle('on',v); swAuto.setAttribute('aria-checked',String(v));
+    app.setAutoRotate(v);
+  };
+
+  const density=$('setDensity'), densityVal=$('setDensityVal');
+  density.oninput=()=>{
+    const v=parseFloat(density.value);
+    densityVal.textContent=v.toFixed(1);
+    app.setTreeDensity(v);
+  };
+
+  const tintWrap=$('setTint');
+  GLASS_TINTS.forEach((c,i)=>{
+    const b=document.createElement('button');
+    b.className='swatch'+(i===0?' active':''); b.style.background=c;
+    b.title=c; b.setAttribute('aria-label','Glass tint '+c);
+    b.onclick=()=>{
+      tintWrap.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+      b.classList.add('active');
+      app.setGlassTint(c);
+    };
+    tintWrap.appendChild(b);
+  });
+
+  app.boot();
+})();
+</script>
+</body>
+</html>
